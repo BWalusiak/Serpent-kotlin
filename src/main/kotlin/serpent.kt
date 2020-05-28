@@ -30,9 +30,9 @@ fun makeKey(key: ByteArray): Array<IntArray> {
         }
     }
 
-    for ((j, i) in (8..16).withIndex()) {
-        val t = w[j] xor w[i - 5] xor w[i - 3] xor w[i - 1] xor PHI xor j
-        w[i] = t shl 11 or t ushr 21
+    for ((i, j) in (8..16).withIndex()) {
+        val t = w[i] xor w[j - 5] xor w[j - 3] xor w[j - 1] xor PHI xor i
+        w[j] = t shl 11 or t ushr 21
     }
 
     System.arraycopy(w, 8, w, 0, 8)
