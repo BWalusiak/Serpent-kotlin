@@ -12,97 +12,57 @@ import kotlin.experimental.and
 @Synchronized
 @Throws(InvalidKeyException::class)
 fun makeKey(key: ByteArray): Array<IntArray> {
-    val w = IntArray(4 * (ROUNDS + 1))
-    var offset = 0
-    var limit: Int = key.size / 4
-    var j: Int
-    var i = 0
-    while (i < limit) {
-        w[i] = (key[offset++].toInt() and 0xFF) or (
-                (key[offset++].toInt() and 0xFF) shl 8) or (
-                (key[offset++].toInt() and 0xFF) shl 16) or (
-                (key[offset++].toInt() and 0xFF) shl 24)
-        i++
-    }
-    if (i < 8) {
-        w[i] = 1
-    }
-
-    var t: Int
-    i = 8
-    j = 0
-    while (i < 16) {
-        t = w[j] xor w[i - 5] xor w[i - 3] xor w[i - 1] xor PHI xor j++
-        w[i] = t shl 11 or t ushr 21
-        i++
-    }
-    // translate the buffer by -8
-    i = 0
-    j = 8
-    while (i < 8) {
-        w[i++] = w[j++]
-    }
-    limit = 4 * (ROUNDS + 1) // 132 for a 32-round Serpent
-    // finish computing the remaining intermediary subkeys
-    while (i < limit) {
-        t = w[i - 8] xor w[i - 5] xor w[i - 3] xor w[i - 1] xor PHI xor i
-        w[i] = t shl 11 or t ushr 21
-        i++
-    }
-    // compute intermediary key into k[]
-    val k = IntArray(limit)
-    var box: Int
-    var a: Int
-    var b: Int
-    var c: Int
-    var d: Int
-    var input: Int
-    var out: Int
-
-    i = 0
-
-    while (i < ROUNDS + 1) {
-        box = (ROUNDS + 3 - i) % ROUNDS
-        a = w[4 * i]
-        b = w[4 * i + 1]
-        c = w[4 * i + 2]
-        d = w[4 * i + 3]
-        j = 0
-
-        while (j < 32) {
-            input = getBit(a, j) or (
-                    getBit(b, j) shl 1) or (
-                    getBit(c, j) shl 2) or (
-                    getBit(d, j) shl 3)
-            out = s(box, input)
-            k[4 * i] = k[4 * i] or (getBit(out, 0) shl j)
-            k[4 * i + 1] = k[4 * i + 1] or (getBit(out, 1) shl j)
-            k[4 * i + 2] = k[4 * i + 2] or (getBit(out, 2) shl j)
-            k[4 * i + 3] = k[4 * i + 3] or (getBit(out, 3) shl j)
-            j++
+    val limit: Int = key.size / 4
+    val w = IntArray(4 * (ROUNDS + 1)) {
+        when {
+            it < limit -> {
+                (key[it * 4].toInt() and 0xFF) or
+                        ((key[it * 4 + 1].toInt() and 0xFF) shl 8) or
+                        ((key[it * 4 + 2].toInt() and 0xFF) shl 16) or
+                        ((key[it * 4 + 3].toInt() and 0xFF) shl 24)
+            }
+            it == limit -> {
+                1
+            }
+            else -> {
+                0
+            }
         }
-
-        i++
     }
 
-    val keySchedule: Array<IntArray> = Array(ROUNDS + 1) { IntArray(4) }
-    i = 0
-    offset = 0
-    while (i < ROUNDS + 1) {
-        keySchedule[i][0] = k[offset++]
-        keySchedule[i][1] = k[offset++]
-        keySchedule[i][2] = k[offset++]
-        keySchedule[i][3] = k[offset++]
-        i++
+    for ((j, i) in (8..16).withIndex()) {
+        val t = w[j] xor w[i - 5] xor w[i - 3] xor w[i - 1] xor PHI xor j
+        w[i] = t shl 11 or t ushr 21
     }
 
-    i = 0
-    while (i < ROUNDS + 1) {
-        keySchedule[i] = ip(keySchedule[i])
-        i++
+    System.arraycopy(w, 8, w, 0, 8)
+
+    for (i in 8 until 4 * (ROUNDS + 1)) {
+        val t = w[i - 8] xor w[i - 5] xor w[i - 3] xor w[i - 1] xor PHI xor i
+        w[i] = t shl 11 or t ushr 21
     }
 
-    return keySchedule
+    val k = IntArray(4 * (ROUNDS + 1))
+
+    for (i in 0 until ROUNDS + 1) {
+        for (bit in 0..31) {
+            val input = getBit(w[4 * i], bit) or
+                    (getBit(w[4 * i + 1], bit) shl 1) or
+                    (getBit(w[4 * i + 2], bit) shl 2) or
+                    (getBit(w[4 * i + 3], bit) shl 3)
+
+            val out = s((ROUNDS + 3 - i) % ROUNDS, input)
+
+            k[4 * i] = k[4 * i] or (getBit(out, 0) shl bit)
+            k[4 * i + 1] = k[4 * i + 1] or (getBit(out, 1) shl bit)
+            k[4 * i + 2] = k[4 * i + 2] or (getBit(out, 2) shl bit)
+            k[4 * i + 3] = k[4 * i + 3] or (getBit(out, 3) shl bit)
+        }
+    }
+
+    return Array(ROUNDS + 1) { i ->
+        IntArray(4) { k[i * 4 + it] }
+    }.map { ip(it) }.toTypedArray()
 }
 
 /**
@@ -122,6 +82,7 @@ fun blockEncrypt(input: ByteArray, inOffset: Int, sessionKey: Array<IntArray>): 
     }
 
     x = fp(bHat)
+
     return unpackArray(x)
 }
 
@@ -149,24 +110,28 @@ fun blockDecrypt(input: ByteArray, inOffset: Int, sessionKey: Array<IntArray>): 
 fun blockDecryptGetP(input: Int, value: Int, sessionKey: Array<IntArray>): ByteArray {
     var x = intArrayOf(0, 0, 0, 0)
     var bHat = fpi(x)
+
     for (i in ROUNDS - 1 downTo 0) {
         bHat = ri(i, bHat, sessionKey, input, value)
     }
+
     x = ipi(bHat)
+
     return unpackArray(x)
 }
 
 private fun packArray(input: ByteArray, offset: Int): IntArray {
     var o = offset
+
     return intArrayOf(
-            input[o++].toInt() and 0xFF or (input[o++].toInt() and 0xFF shl 8) or (
-                    input[o++].toInt() and 0xFF shl 16) or (input[o++].toInt() and 0xFF shl 24),
-            input[o++].toInt() and 0xFF or (input[o++].toInt() and 0xFF shl 8) or (
-                    input[o++].toInt() and 0xFF shl 16) or (input[o++].toInt() and 0xFF shl 24),
-            input[o++].toInt() and 0xFF or (input[o++].toInt() and 0xFF shl 8) or (
-                    input[o++].toInt() and 0xFF shl 16) or (input[o++].toInt() and 0xFF shl 24),
-            input[o++].toInt() and 0xFF or (input[o++].toInt() and 0xFF shl 8) or (
-                    input[o++].toInt() and 0xFF shl 16) or (input[o].toInt() and 0xFF shl 24)
+        input[o++].toInt() and 0xFF or (input[o++].toInt() and 0xFF shl 8) or (
+                input[o++].toInt() and 0xFF shl 16) or (input[o++].toInt() and 0xFF shl 24),
+        input[o++].toInt() and 0xFF or (input[o++].toInt() and 0xFF shl 8) or (
+                input[o++].toInt() and 0xFF shl 16) or (input[o++].toInt() and 0xFF shl 24),
+        input[o++].toInt() and 0xFF or (input[o++].toInt() and 0xFF shl 8) or (
+                input[o++].toInt() and 0xFF shl 16) or (input[o++].toInt() and 0xFF shl 24),
+        input[o++].toInt() and 0xFF or (input[o++].toInt() and 0xFF shl 8) or (
+                input[o++].toInt() and 0xFF shl 16) or (input[o].toInt() and 0xFF shl 24)
     )
 }
 
@@ -175,11 +140,12 @@ private fun unpackArray(input: IntArray): ByteArray {
     val b = input[1]
     val c = input[2]
     val d = input[3]
+
     return byteArrayOf(
-            a.toByte(), (a ushr 8).toByte(), (a ushr 16).toByte(), (a ushr 24).toByte(),
-            b.toByte(), (b ushr 8).toByte(), (b ushr 16).toByte(), (b ushr 24).toByte(),
-            c.toByte(), (c ushr 8).toByte(), (c ushr 16).toByte(), (c ushr 24).toByte(),
-            d.toByte(), (d ushr 8).toByte(), (d ushr 16).toByte(), (d ushr 24).toByte()
+        a.toByte(), (a ushr 8).toByte(), (a ushr 16).toByte(), (a ushr 24).toByte(),
+        b.toByte(), (b ushr 8).toByte(), (b ushr 16).toByte(), (b ushr 24).toByte(),
+        c.toByte(), (c ushr 8).toByte(), (c ushr 16).toByte(), (c ushr 24).toByte(),
+        d.toByte(), (d ushr 8).toByte(), (d ushr 16).toByte(), (d ushr 24).toByte()
     )
 }
 
@@ -209,8 +175,11 @@ private fun getBit(x: IntArray, i: Int): Int {
  * rightmost one) in any 32-bit entity is at position 0.
  */
 private fun setBit(x: IntArray, i: Int, v: Int) {
-    if (v and 0x01 == 1) x[i / 32] = x[i / 32] or (1 shl i % 32) // set it
-    else x[i / 32] = x[i / 32] and (1 shl i % 32).inv() // clear it
+    if (v and 0x01 == 1) {
+        x[i / 32] = x[i / 32] or (1 shl i % 32)
+    } else {
+        x[i / 32] = x[i / 32] and (1 shl i % 32).inv()
+    }
 }
 
 /**
@@ -227,7 +196,7 @@ private fun getNibble(x: Int, i: Int): Int {
  * Permutation (IP) to a 128-bit entity `x`.
  */
 private fun ip(x: IntArray): IntArray {
-    return permutate(IP, x)
+    return permute(IP, x)
 }
 
 /**
@@ -235,7 +204,7 @@ private fun ip(x: IntArray): IntArray {
  * the Initial Permutation to a 128-bit entity `x`.
  */
 private fun ipi(x: IntArray): IntArray {
-    return permutate(FP, x)
+    return permute(FP, x)
 }
 
 /**
@@ -243,7 +212,7 @@ private fun ipi(x: IntArray): IntArray {
  * Permutation (FP) to a 128-bit entity `x`.
  */
 private fun fp(x: IntArray): IntArray {
-    return permutate(FP, x)
+    return permute(FP, x)
 }
 
 /**
@@ -251,7 +220,7 @@ private fun fp(x: IntArray): IntArray {
  * the Final Permutation to a 128-bit entity `x`.
  */
 private fun fpi(x: IntArray): IntArray {
-    return permutate(IP, x)
+    return permute(IP, x)
 }
 
 /**
@@ -259,7 +228,7 @@ private fun fpi(x: IntArray): IntArray {
  * coded in a given table `T` to a 128-bit entity
  * `x`.
  */
-private fun permutate(T: ByteArray, x: IntArray): IntArray {
+private fun permute(T: ByteArray, x: IntArray): IntArray {
     val result = IntArray(4)
     for (i in 0..127) setBit(result, i, getBit(x, T[i].toInt() and 0x7F))
     return result
@@ -334,12 +303,10 @@ private fun lti(x: IntArray): IntArray {
  * produce the resulting bit at position `i`.
  */
 private fun transform(T: Array<ByteArray>, x: IntArray): IntArray {
-    var j: Int
-    var b: Int
     val result = IntArray(4)
     for (i in 0..127) {
-        b = 0
-        j = 0
+        var b = 0
+        var j = 0
         while (T[i][j] != xFF) {
             b = b xor getBit(x, T[i][j].toInt() and 0x7F)
             j++
