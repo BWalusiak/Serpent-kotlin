@@ -1,4 +1,4 @@
-package serpent
+package com.roundel.serpent
 
 import com.google.common.hash.Hashing
 import kotlin.text.Charsets.UTF_8
