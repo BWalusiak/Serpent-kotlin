@@ -21,7 +21,7 @@ fun makeKey(key: ByteArray): Array<IntArray> {
                         ((key[it * 4 + 2].toInt() and 0xFF) shl 16) or
                         ((key[it * 4 + 3].toInt() and 0xFF) shl 24)
             }
-            it == limit && limit < 8 -> {
+            it == limit && it < 8 -> {
                 1
             }
             else -> {
