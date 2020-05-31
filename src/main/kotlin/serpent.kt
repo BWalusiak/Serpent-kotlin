@@ -12,6 +12,10 @@ import kotlin.experimental.and
 @Synchronized
 @Throws(InvalidKeyException::class)
 fun makeKey(key: ByteArray): Array<IntArray> {
+    if(key.size % 4 != 0) {
+        throw InvalidKeyException("The key's byte count has to be a multiple of 4")
+    }
+
     val limit: Int = key.size / 4
     val w = IntArray(4 * (ROUNDS + 1)) {
         when {
@@ -330,7 +334,7 @@ private fun r(i: Int, bHati: IntArray, kHat: Array<IntArray>): IntArray {
     } else if (i == ROUNDS - 1) {
         xor128(sHatI, kHat[ROUNDS])
     } else {
-        throw RuntimeException("Round " + i + " is out of 0.." + (ROUNDS - 1) + " range")
+        throw RuntimeException("Round $i is out of 0..${ROUNDS - 1} range")
     }
 }
 
@@ -340,7 +344,7 @@ private fun xored(i: Int, bHatI1: IntArray, kHat: Array<IntArray>): IntArray {
     } else if (i == ROUNDS - 1) {
         xor128(bHatI1, kHat[ROUNDS])
     } else {
-        throw RuntimeException("Round " + i + " is out of 0.." + (ROUNDS - 1) + " range")
+        throw RuntimeException("Round $i is out of 0..${ROUNDS - 1} range")
     }
 
     return sHatInverse(i, sHatI)
