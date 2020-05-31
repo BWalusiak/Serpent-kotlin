@@ -1,4 +1,4 @@
-package serpent
+package com.roundel.serpent
 
 import java.security.InvalidKeyException
 import kotlin.experimental.and
@@ -80,16 +80,15 @@ fun makeKey(key: ByteArray): Array<IntArray> {
  * @return The ciphertext generated from a plaintext using the session key.
  */
 fun blockEncrypt(input: ByteArray, inOffset: Int, sessionKey: Array<IntArray>): ByteArray {
-    var x = packArray(input, inOffset)
+    var bHat = packArray(input, inOffset)
 
-    var bHat = permute(IP, x)
+    bHat = permute(IP, bHat)
     for (i in 0 until ROUNDS) {
         bHat = r(i, bHat, sessionKey)
     }
+    bHat = permute(FP, bHat)
 
-    x = permute(FP, bHat)
-
-    return unpackArray(x)
+    return unpackArray(bHat)
 }
 
 /**
@@ -101,29 +100,27 @@ fun blockEncrypt(input: ByteArray, inOffset: Int, sessionKey: Array<IntArray>): 
  * @return The plaintext generated from a ciphertext using the session key.
  */
 fun blockDecrypt(input: ByteArray, inOffset: Int, sessionKey: Array<IntArray>): ByteArray {
-    var x = packArray(input, inOffset)
-    var bHat = permute(IP, x)
+    var bHat = packArray(input, inOffset)
 
+    bHat = permute(IP, bHat)
     for (i in ROUNDS - 1 downTo 0) {
         bHat = ri(i, bHat, sessionKey)
     }
+    bHat = permute(FP, bHat)
 
-    x = permute(FP, bHat)
-
-    return unpackArray(x)
+    return unpackArray(bHat)
 }
 
 fun blockDecryptGetP(input: Int, value: Int, sessionKey: Array<IntArray>): ByteArray {
-    var x = intArrayOf(0, 0, 0, 0)
-    var bHat = permute(IP, x)
+    var bHat = intArrayOf(0, 0, 0, 0)
 
+    bHat = permute(IP, bHat)
     for (i in ROUNDS - 1 downTo 0) {
         bHat = ri(i, bHat, sessionKey, input, value)
     }
+    bHat = permute(FP, bHat)
 
-    x = permute(FP, x)
-
-    return unpackArray(x)
+    return unpackArray(bHat)
 }
 
 private fun packArray(input: ByteArray, offset: Int): IntArray {
@@ -216,7 +213,11 @@ private fun getNibble(x: Int, i: Int): Int {
  */
 private fun permute(T: ByteArray, x: IntArray): IntArray {
     val result = IntArray(4)
-    for (i in 0..127) setBit(result, i, getBit(x, T[i].toInt() and 0x7F))
+
+    for (i in 0..127) {
+        setBit(result, i, getBit(x, T[i].toInt() and 0x7F))
+    }
+
     return result
 }
 
@@ -250,7 +251,13 @@ private fun si(box: Int, x: Int): Int {
  */
 private fun sHat(box: Int, x: IntArray): IntArray {
     val result = IntArray(4)
-    for (i in 0..3) for (nibble in 0..7) result[i] = result[i] or (s(box, getNibble(x[i], nibble)) shl nibble * 4)
+
+    for (i in 0..3) {
+        for (nibble in 0..7) {
+            result[i] = result[i] or (s(box, getNibble(x[i], nibble)) shl nibble * 4)
+        }
+    }
+
     return result
 }
 
@@ -261,25 +268,16 @@ private fun sHat(box: Int, x: IntArray): IntArray {
  */
 private fun sHatInverse(box: Int, x: IntArray): IntArray {
     val result = IntArray(4)
-    for (i in 0..3) for (nibble in 0..7) result[i] = result[i] or (si(box, getNibble(x[i], nibble)) shl nibble * 4)
+
+    for (i in 0..3) {
+        for (nibble in 0..7) {
+            result[i] = result[i] or (si(box, getNibble(x[i], nibble)) shl nibble * 4)
+        }
+    }
+
     return result
 }
 
-/**
- * @return A 128-bit entity being the result of applying the linear
- * transformation to a 128-bit entity `x`.
- */
-private fun lt(x: IntArray): IntArray {
-    return transform(LT, x)
-}
-
-/**
- * @return A 128-bit entity being the result of applying the inverse of
- * the linear transformation to a 128-bit entity `x`.
- */
-private fun lti(x: IntArray): IntArray {
-    return transform(LT_INVERSE, x)
-}
 
 /**
  * @return A 128-bit entity being the result of applying a transformation
@@ -290,15 +288,16 @@ private fun lti(x: IntArray): IntArray {
  */
 private fun transform(T: Array<ByteArray>, x: IntArray): IntArray {
     val result = IntArray(4)
-    for (i in 0..127) {
+    for ((i, arr) in T.withIndex()) {
         var b = 0
-        var j = 0
-        while (T[i][j] != xFF) {
-            b = b xor getBit(x, T[i][j].toInt() and 0x7F)
-            j++
+
+        for (t in arr) {
+            b = b xor getBit(x, t.toInt() and 0x7F)
         }
+
         setBit(result, i, b)
     }
+
     return result
 }
 
@@ -307,12 +306,12 @@ private fun transform(T: Array<ByteArray>, x: IntArray): IntArray {
  * R at round `i` to the 128-bit entity `bHati`,
  * using the appropriate subkeys from `kHat`.
  */
-private fun r(i: Int, bHati: IntArray, kHat: Array<IntArray>): IntArray {
-    val xored = xor128(bHati, kHat[i])
+private fun r(i: Int, bHatI: IntArray, kHat: Array<IntArray>): IntArray {
+    val xored = xor128(bHatI, kHat[i])
     val sHatI = sHat(i, xored)
 
     return if (0 <= i && i <= ROUNDS - 2) {
-        lt(sHatI)
+        transform(LT, sHatI)
     } else if (i == ROUNDS - 1) {
         xor128(sHatI, kHat[ROUNDS])
     } else {
@@ -321,8 +320,8 @@ private fun r(i: Int, bHati: IntArray, kHat: Array<IntArray>): IntArray {
 }
 
 private fun xored(i: Int, bHatI1: IntArray, kHat: Array<IntArray>): IntArray {
-    val sHatI: IntArray = if (0 <= i && i <= ROUNDS - 2) {
-        lti(bHatI1)
+    val sHatI = if (0 <= i && i <= ROUNDS - 2) {
+        transform(LT_INVERSE, bHatI1)
     } else if (i == ROUNDS - 1) {
         xor128(bHatI1, kHat[ROUNDS])
     } else {

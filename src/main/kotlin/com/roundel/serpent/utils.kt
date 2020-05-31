@@ -1,4 +1,4 @@
-package serpent
+package com.roundel.serpent
 
 private val HEX_CHARS = "0123456789ABCDEF".toCharArray()
 
