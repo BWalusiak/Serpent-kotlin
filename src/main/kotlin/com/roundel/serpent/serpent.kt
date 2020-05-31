@@ -57,7 +57,7 @@ fun makeKey(key: ByteArray): Array<IntArray> {
                 (getBit(w[i + 2], bit) shl 2) or
                 (getBit(w[i + 3], bit) shl 3)
 
-            val out = s((ROUNDS + 3 - i / 4) % ROUNDS, input)
+            val out = sBox((ROUNDS + 3 - i / 4) % ROUNDS, input)
 
             k[i] = k[i] or (getBit(out, 0) shl bit)
             k[i + 1] = k[i + 1] or (getBit(out, 1) shl bit)
@@ -74,7 +74,7 @@ fun makeKey(key: ByteArray): Array<IntArray> {
 /**
  * Encrypt exactly one block of plaintext.
  *
- * @param  input         The plaintext.
+ * @param  input      The plaintext.
  * @param  inOffset   Index of in from which to start considering data.
  * @param  sessionKey The session key to use for encryption.
  * @return The ciphertext generated from a plaintext using the session key.
@@ -84,7 +84,7 @@ fun blockEncrypt(input: ByteArray, inOffset: Int, sessionKey: Array<IntArray>): 
 
     bHat = permute(IP, bHat)
     for (i in 0 until ROUNDS) {
-        bHat = r(i, bHat, sessionKey)
+        bHat = round(i, bHat, sessionKey)
     }
     bHat = permute(FP, bHat)
 
@@ -94,7 +94,7 @@ fun blockEncrypt(input: ByteArray, inOffset: Int, sessionKey: Array<IntArray>): 
 /**
  * Decrypt exactly one block of ciphertext.
  *
- * @param  input         The ciphertext.
+ * @param  input      The ciphertext.
  * @param  inOffset   Index of in from which to start considering data.
  * @param  sessionKey The session key to use for decryption.
  * @return The plaintext generated from a ciphertext using the session key.
@@ -104,7 +104,7 @@ fun blockDecrypt(input: ByteArray, inOffset: Int, sessionKey: Array<IntArray>): 
 
     bHat = permute(IP, bHat)
     for (i in ROUNDS - 1 downTo 0) {
-        bHat = ri(i, bHat, sessionKey)
+        bHat = roundInverse(i, bHat, sessionKey)
     }
     bHat = permute(FP, bHat)
 
@@ -116,7 +116,7 @@ fun blockDecryptGetP(input: Int, value: Int, sessionKey: Array<IntArray>): ByteA
 
     bHat = permute(IP, bHat)
     for (i in ROUNDS - 1 downTo 0) {
-        bHat = ri(i, bHat, sessionKey, input, value)
+        bHat = roundInverse(i, bHat, sessionKey, input, value)
     }
     bHat = permute(FP, bHat)
 
@@ -233,7 +233,7 @@ private fun xor128(x: IntArray, y: IntArray): IntArray {
  * @return The nibble --a 4-bit entity-- obtained by applying a given
  * S-box to a 32-bit entity `x`.
  */
-private fun s(box: Int, x: Int): Int {
+private fun sBox(box: Int, x: Int): Int {
     return (SBOX[box][x] and 0x0F).toInt()
 }
 
@@ -254,7 +254,7 @@ private fun sHat(box: Int, x: IntArray): IntArray {
 
     for (i in 0..3) {
         for (nibble in 0..7) {
-            result[i] = result[i] or (s(box, getNibble(x[i], nibble)) shl nibble * 4)
+            result[i] = result[i] or (sBox(box, getNibble(x[i], nibble)) shl nibble * 4)
         }
     }
 
@@ -303,10 +303,10 @@ private fun transform(T: Array<ByteArray>, x: IntArray): IntArray {
 
 /**
  * @return the 128-bit entity as the result of applying the round function
- * R at round `i` to the 128-bit entity `bHati`,
+ * R at round `i` to the 128-bit entity `bHatI`,
  * using the appropriate subkeys from `kHat`.
  */
-private fun r(i: Int, bHatI: IntArray, kHat: Array<IntArray>): IntArray {
+private fun round(i: Int, bHatI: IntArray, kHat: Array<IntArray>): IntArray {
     val xored = xor128(bHatI, kHat[i])
     val sHatI = sHat(i, xored)
 
@@ -334,14 +334,14 @@ private fun xored(i: Int, bHatI1: IntArray, kHat: Array<IntArray>): IntArray {
 /**
  * @return the 128-bit entity as the result of applying the inverse of
  * the round function R at round `i` to the 128-bit
- * entity `bHati`, using the appropriate subkeys from
+ * entity `bHatI`, using the appropriate subkeys from
  * `kHat`.
  */
-private fun ri(i: Int, bHatI: IntArray, kHat: Array<IntArray>): IntArray {
+private fun roundInverse(i: Int, bHatI: IntArray, kHat: Array<IntArray>): IntArray {
     return xor128(xored(i, bHatI, kHat), kHat[i])
 }
 
-private fun ri(i: Int, bHatI1: IntArray, kHat: Array<IntArray>, input: Int, value: Int): IntArray {
+private fun roundInverse(i: Int, bHatI1: IntArray, kHat: Array<IntArray>, input: Int, value: Int): IntArray {
     val xored = xored(i, bHatI1, kHat)
     if (i == input) {
         xored[0] = value or (value shl 4)
