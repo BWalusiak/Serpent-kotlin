@@ -22,7 +22,7 @@ fun ByteArray.toHex(): String {
 
     forEach {
         val octet = it.toInt()
-        val firstIndex = (octet and 0xF0).ushr(4)
+        val firstIndex = (octet and 0xF0) ushr 4
         val secondIndex = octet and 0x0F
         sb.append(HEX_CHARS[firstIndex])
         sb.append(HEX_CHARS[secondIndex])
