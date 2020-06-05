@@ -4,14 +4,15 @@ import com.google.common.hash.Hashing
 import kotlin.text.Charsets.UTF_8
 
 fun main() {
-    val password = "Hello world"
+    val password = "Hello world jasjdjj"
 
     val key = makeKey(hashPassword(password))
-    val data = ByteArray(32) {
-        it.toByte()
-    }
+    val data = ByteArray(16)
+    val str = "adasd"
 
-    val encrypted = blockEncrypt(data, 16, key)
+    System.arraycopy(str.toByteArray(), 0, data, 0, str.length)
+
+    val encrypted = blockEncrypt(data, 0, key)
 
     println(encrypted.toHex())
 

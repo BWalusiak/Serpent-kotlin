@@ -19,6 +19,7 @@ fun makeKey(key: ByteArray): Array<IntArray> {
     val keySize: Int = key.size / 4
     val keyMaterialWords = 4 * (ROUNDS + 1)
 
+    // Copy the key to LSBs
     val w = IntArray(keyMaterialWords) {
         when {
             it < keySize -> {
@@ -38,14 +39,14 @@ fun makeKey(key: ByteArray): Array<IntArray> {
 
     for ((i, j) in (8..15).withIndex()) {
         val t = w[j - 8] xor w[j - 5] xor w[j - 3] xor w[j - 1] xor PHI xor i
-        w[j] = (t shl 11) or (t ushr 21) // Replacement for an unsigned shift left
+        w[j] = (t shl 11) or (t ushr 21)
     }
 
     System.arraycopy(w, 8, w, 0, 8)
 
     for (i in 8 until keyMaterialWords) {
         val t = w[i - 8] xor w[i - 5] xor w[i - 3] xor w[i - 1] xor PHI xor i
-        w[i] = (t shl 11) or (t ushr 21) // Replacement for an unsigned shift left
+        w[i] = (t shl 11) or (t ushr 21)
     }
 
     val k = IntArray(keyMaterialWords)
